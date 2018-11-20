@@ -160,6 +160,8 @@ class FA(object):
             q = worklist.popleft()
             for ch in self.alphabet:
                 slist, idset = FA.e_closure(FA.delta(q[0], ch))
+                if len(slist) <= 0:
+                    continue
                 idset = frozenset(idset)
                 if idset not in oldnew_map:
                     oldnew_map[idset] = FA.new_state_from(newfa, slist)
