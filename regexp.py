@@ -97,13 +97,13 @@ class Lexer(lexer.ILexer):
 
 def execute_rpn(tokens):
     """
-    :type tokens: list[Token]
+    :type tokens: list[Token|lexer.IToken]
     :rtype: fa.FA
     """
     fa_stack = []
     for token in tokens:
         if not token.is_operator():
-            fa_stack.append(fa.FA(token.lexeme))
+            fa_stack.append(fa.FA.build_from_letter(token.lexeme))
             continue
 
         if token.kind == Token.CLOSURE_KIND:

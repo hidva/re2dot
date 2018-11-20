@@ -12,6 +12,18 @@ class State(object):
         self.fa = fa
         return
 
+    def follow(self, ch):
+        """
+        :rtype: list[State]
+        """
+        # 如果严格遵循 https://blog.hidva.com/2018/11/14/EngineeringACompiler/ 中记录的 Thompson 构造法所遵循的性质,
+        # 那么 len(froms) <= 2 + len(字母表). 所以应该不需要为 froms 整个索引, 常规遍历应该就足够了.
+        ret = []
+        for move in self.froms:
+            if move.label == ch:
+                ret.append(move.to_state)
+        return ret  # 如果遵循 Thompson 构造法定义的性质, len(ret) <= 2.
+
     def __cls_def_end(self):
         return
 
@@ -28,18 +40,28 @@ class Move(object):
 
 
 class FA(object):
-    EPSILON = 'ϵ'
+    EPSILON = 'ϵ'  # 感谢 unicode~
 
-    def __init__(self, ch):
-        s0 = self.new_state()
-        s0.is_start = True
-        s1 = self.new_state()
-        s1.is_accept = True
-        FA.new_move(s0, s1, ch)
-
-        self.start = s0
-        self.accepts = [s1]
+    def __init__(self):
+        self.start = None
+        self.accepts = []
+        self.alphabet = set()  # EPSILON 并不是字母表一部分.
         return
+
+    @staticmethod
+    def build_from_letter(ch):
+        """
+        :rtype: FA
+        """
+        retfa = FA()
+        s0 = retfa.new_state()
+        s0.is_start = True
+        s1 = retfa.new_state()
+        s1.is_accept = True
+        retfa.new_move(s0, s1, ch)
+        retfa.start = s0
+        retfa.accepts = [s1]
+        return retfa
 
     def alternate(self, right):
         """
@@ -54,10 +76,10 @@ class FA(object):
         s0.is_start = True
         sn = self.new_state()
         sn.is_accept = True
-        FA.new_move(s0, self.start, FA.EPSILON)
-        FA.new_move(s0, right.start, FA.EPSILON)
-        FA.new_move(self.accepts[0], sn, FA.EPSILON)
-        FA.new_move(right.accepts[0], sn, FA.EPSILON)
+        self.new_move(s0, self.start, FA.EPSILON)
+        self.new_move(s0, right.start, FA.EPSILON)
+        self.new_move(self.accepts[0], sn, FA.EPSILON)
+        self.new_move(right.accepts[0], sn, FA.EPSILON)
         self.start.is_start = False
         self.accepts[0].is_accept = False
         right.start.is_start = False
@@ -66,6 +88,7 @@ class FA(object):
         right.accepts = None
         self.start = s0
         self.accepts[0] = sn
+        self.alphabet.update(right.alphabet)
         return self
 
     def concat(self, right):
@@ -76,10 +99,11 @@ class FA(object):
         assert len(self.accepts) == 1
         assert len(right.accepts) == 1
 
-        FA.new_move(self.accepts[0], right.start, FA.EPSILON)
+        self.new_move(self.accepts[0], right.start, FA.EPSILON)
         self.accepts[0].is_accept = False
         right.start.is_start = False
         self.accepts[0] = right.accepts[0]
+        self.alphabet.update(right.alphabet)
         right.start = None
         right.accepts = None
         return self
@@ -94,24 +118,99 @@ class FA(object):
         sn = self.new_state()
         s0.is_start = True
         sn.is_accept = True
-        FA.new_move(s0, sn, FA.EPSILON)
-        FA.new_move(s0, self.start, FA.EPSILON)
-        FA.new_move(self.accepts[0], sn, FA.EPSILON)
-        FA.new_move(self.accepts[0], self.start, FA.EPSILON)
+        self.new_move(s0, sn, FA.EPSILON)
+        self.new_move(s0, self.start, FA.EPSILON)
+        self.new_move(self.accepts[0], sn, FA.EPSILON)
+        self.new_move(self.accepts[0], self.start, FA.EPSILON)
         self.start.is_start = False
         self.accepts[0].is_accept = False
         self.start = s0
         self.accepts[0] = sn
         return self
 
+    @staticmethod
+    def new_state_from(fa, slist):
+        """
+        :type fa: FA
+        :type slist: list[State]
+        :rtype: State
+        """
+        s = fa.new_state()
+        for state in slist:
+            if state.is_start:
+                s.is_start = True
+            if state.is_accept:
+                s.is_accept = True
+        if s.is_start:
+            fa.start = s
+        if s.is_accept:
+            fa.accepts.append(s)
+        return s
+
+    def to_dfa(self):
+        self.normalize_states_id()
+        newfa = FA()
+        # key 为 frozenset[state_id], 对应着 self 的一个有效配置. value 为该有效配置在新 dfa 中对应的状态.
+        oldnew_map = {}
+        slist, idset = FA.e_closure((self.start,))
+        idset = frozenset(idset)
+        oldnew_map[idset] = FA.new_state_from(newfa, slist)
+        worklist = collections.deque(((slist, idset),))
+        while len(worklist) > 0:
+            q = worklist.popleft()
+            for ch in self.alphabet:
+                slist, idset = FA.e_closure(FA.delta(q[0], ch))
+                idset = frozenset(idset)
+                if idset not in oldnew_map:
+                    oldnew_map[idset] = FA.new_state_from(newfa, slist)
+                    worklist.append((slist, idset))
+                newfa.new_move(oldnew_map[q[1]], oldnew_map[idset], ch)
+        return newfa
+
     def new_state(self):
         return State(None, False, False, self)
 
     @staticmethod
-    def new_move(from_state, to, label):
+    def e_closure(q):
+        """
+        :type q: list[State]|tuple[State]
+        :rtype: tuple[list[State]]
+        这里 type, rtype 只是用来给 IDE 自动完成, 并不是严格的实际类型.
+        """
+        ret = []
+        idset = set()
+        worklist = collections.deque(q)
+        while len(worklist) > 0:
+            state = worklist.popleft()
+            if state.state_id in idset:
+                continue
+            ret.append(state)
+            idset.add(state.state_id)
+            worklist.extend(state.follow(FA.EPSILON))
+        return ret, idset
+
+    @staticmethod
+    def delta(q, c):
+        """
+        :type q: list[State]
+        :rtype: list[State]
+        """
+        ret = []
+        for state in q:
+            ret.extend(state.follow(c))
+        return ret
+
+    def new_move(self, from_state, to, label):
+        """
+        :type from_state: State
+        :type to: State
+        :rtype: Move
+        """
         m = Move(from_state, to, label)
         from_state.froms.append(m)
         to.tos.append(m)
+        if label != FA.EPSILON:
+            self.alphabet.add(label)
         return m
 
     @staticmethod
