@@ -22,7 +22,7 @@ import rpn
 def main():
     parser = argparse.ArgumentParser(description='根据正则表达式生成其对应 DFA 的状态转移图')
     parser.add_argument("regexp", help="正则表达式")
-    parser.add_argument("-N", "--nfa", help="若指定, 则输出原始 NFA 对应的状态转移图. 默认值", action="store_true")
+    parser.add_argument("-N", "--nfa", help="若指定, 则输出原始 NFA 对应的状态转移图.", action="store_true")
     parser.add_argument("-D", "--dfa", help="若指定, 则输出原始 NFA 转换为 DFA 对应的状态转移图.", action="store_true")
     parser.add_argument("-d", "--minidfa", help="若指定, 则输出原始 NFA 转换为 DFA 并最小化后对应的状态转移图.",
                         action="store_true")
@@ -33,9 +33,7 @@ def main():
         print(fa.to_dotsource())
         return
     dfa = fa.to_dfa()
-    if args.dfa:
-        print(dfa.to_dotsource())
-        return
+    print(dfa.to_dotsource())
     return
 
 
