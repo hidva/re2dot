@@ -79,7 +79,7 @@ class Lexer(lexer.ILexer):
         if self.pre_token is not None and \
                 (self.pre_token.kind == Token.OPERAND_KIND or self.pre_token.kind == Token.CLOSURE_KIND or
                  self.pre_token.kind == Token.RIGHT_PARENTHESIS_KIND):
-            self.pre_token = Token(Token.CONCATENATION_KIND, '')
+            self.pre_token = Lexer.CONCATENATION_TOKEN
             return self.pre_token
 
         if ch == '(':
